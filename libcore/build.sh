@@ -12,6 +12,7 @@ TAGS=(
     "with_naive_outbound"
     "badlinkname"
     "tfogo_checklinkname0"
+    "with_tailscale"
 )
 
 IFS="," BUILD_TAGS="${TAGS[*]}"
@@ -352,6 +353,12 @@ if [ -z "$box_version" ]; then
     echo "Unable to determine sing-box version from go.mod" >&2
     exit 1
 fi
+
+# Keep the module files in sync with the current build dependencies.
+# This is required when build tags such as with_tailscale introduce
+# dependencies that are not yet recorded in go.mod/go.sum.
+go mod tidy
+
 husi_version="$(read_husi_version)"
 export CGO_ENABLED=1
 export GO386=softfloat

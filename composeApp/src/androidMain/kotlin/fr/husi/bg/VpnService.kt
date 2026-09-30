@@ -166,6 +166,8 @@ class VpnService : BaseVpnService(),
                 SingBoxOptions.STRATEGY_IPV6_ONLY -> {
                     // https://issuetracker.google.com/issues/149636790
                     builder.addRoute("2000::", 3)
+                    // 👇 新增：强制让特定的私网 IPv6 走 VPN
+                    builder.addRoute("fd7a:115c:a1e0::", 48)
                     fakeDNSRange6?.let {
                         builder.addRoute(it.address.hostAddress!!, it.prefixSize)
                     }
@@ -180,6 +182,8 @@ class VpnService : BaseVpnService(),
                         builder.addRoute(it.address.hostAddress!!, it.prefixSize)
                     }
                     builder.addRoute("2000::", 3)
+                    // 👇 新增：强制让特定的私网 IPv6 走 VPN
+                    builder.addRoute("fd7a:115c:a1e0::", 48)
                 }
             }
         } else {
@@ -306,6 +310,7 @@ class VpnService : BaseVpnService(),
             "64.0.0.0/3",
             "96.0.0.0/6",
             "100.0.0.0/10",
+            "100.64.0.0/10",
             "100.128.0.0/9",
             "101.0.0.0/8",
             "102.0.0.0/7",

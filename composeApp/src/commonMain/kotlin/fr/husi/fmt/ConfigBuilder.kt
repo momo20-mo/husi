@@ -931,7 +931,6 @@ suspend fun buildConfig(
                     }
 
                     if (isEndpoint(this["type"].toString()) && entry.key !in alwaysReferenced) {
-                        this["on_demand"] = true
                     }
 
                     // custom JSON merge

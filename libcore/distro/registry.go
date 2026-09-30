@@ -37,6 +37,7 @@ import (
 	_ "github.com/sagernet/sing-box/transport/v2rayquic"
 
 	"github.com/xchacha20-poly1305/husi/libcore/v2/plugin/protect"
+	"github.com/sagernet/sing-box/protocol/tailscale"
 )
 
 func InboundRegistry() *inbound.Registry {
@@ -97,6 +98,7 @@ func EndpointRegistry() *endpoint.Registry {
 	registerOpenConnectEndpoint(registry)
 	registerOpenVPNEndpoints(registry)
 	masque.RegisterEndpoint(registry)
+	tailscale.RegisterEndpoint(registry)
 
 	return registry
 }
