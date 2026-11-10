@@ -3,7 +3,7 @@ name: Test
 on:
   push:
     branches:
-      - 'dev*'
+      - '#dev*'
     paths:
       - .github/actions/**
       - .github/workflows/test.yml

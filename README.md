@@ -2,6 +2,11 @@
 
 Husi is a non-professional proxy-set-based multiplatform proxy tool set.
 
+## 官方版本的区别（Android）
+
+1. **sing-box 使用 testing 最新版**：构建 Android 核心时解析 SagerNet/sing-box `testing` 分支的最新提交，而非固定使用官方发布版本。
+2. **Tailscale 通过 TUN 工作**：Android 上的 Tailscale 流量经由 VPN/TUN 路由。
+3. **绕过局域网时保留 Tailscale 路由**：启用“绕过局域网”后，Tailscale IP 仍通过 VPN 路由，不作为局域网地址绕过。
 
 ## 🛠️ Contribution
 
