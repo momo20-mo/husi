@@ -38,6 +38,7 @@ import fr.husi.resources.Res
 import fr.husi.resources.invalid_server
 import fr.husi.resources.profile_empty
 import fr.husi.resources.service_failed
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -740,25 +741,43 @@ internal class CoreHostController(
         }
     }
 
-    private suspend fun waitForHostReady() {
-        var delayDuration = 50.milliseconds
-        val deadline = System.nanoTime() + HOST_READY_TIMEOUT.inWholeNanoseconds
-        while (System.nanoTime() < deadline) {
-            if (sessionProcess?.isAlive != true) {
-                throw IOException("husi-core session exited before becoming ready")
+    internal suspend fun waitForHostReady() {
+        var lastFailure: Exception? = null
+        val ready = withTimeoutOrNull(HOST_READY_TIMEOUT) {
+            var retryDelay = 50.milliseconds
+            var serving = false
+            while (!serving) {
+                if (sessionProcess?.isAlive != true) {
+                    throw IOException("husi-core session exited before becoming ready", lastFailure)
+                }
+                try {
+                    coreClient.probe()
+                    serving = true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    lastFailure = e
+                }
+                if (!serving) {
+                    delay(retryDelay)
+                    retryDelay = (retryDelay * 2).coerceAtMost(500.milliseconds)
+                }
             }
-            if (probeHost()) return
-            delay(delayDuration)
-            delayDuration = (delayDuration * 2).coerceAtMost(500.milliseconds)
         }
-        throw IOException("timed out waiting for husi-core session on $socketBasePath")
+        if (ready != null) return
+        val detail = lastFailure?.let { ": ${it.readableMessage}" }.orEmpty()
+        throw IOException("timed out waiting for husi-core session on $socketBasePath$detail", lastFailure)
     }
 
     private suspend fun probeHost(): Boolean {
-        return runCatching {
+        return try {
             coreClient.probe()
             true
-        }.getOrDefault(false)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private suspend fun closeSessionLocked(
@@ -865,6 +884,11 @@ internal class CoreHostController(
         publishHostState()
     }
 
+    /** Test-only: pretend a session child is already running. */
+    internal fun attachSessionProcessForTest(process: Process) {
+        sessionProcess = process
+    }
+
     companion object {
 
         const val API_VERSION = 4
@@ -906,7 +930,7 @@ internal class CoreHostController(
             return when (PlatformInfo.platform) {
                 Platform.Linux, Platform.MacOs -> DAEMON_SOCKET_DIR_UNIX
                 Platform.Windows -> DAEMON_PIPE_PATH_WINDOWS
-                Platform.Android -> error("impossible")
+                Platform.Android, Platform.Web -> error("impossible")
             }
         }
 
@@ -1002,7 +1026,7 @@ private fun resolvePackagedCoreSibling(fileName: String): File? {
         Platform.Linux -> listOf(appRoot.resolve("bin"), appRoot)
         Platform.MacOs -> listOf(appRoot.resolve("MacOS"), appRoot)
         Platform.Windows -> listOf(appRoot)
-        Platform.Android -> emptyList()
+        Platform.Android, Platform.Web -> emptyList()
     }
     for (dir in searchDirs) {
         val candidate = dir.resolve(fileName)
@@ -1018,7 +1042,7 @@ private fun hostCoreBuildDirName(): String {
         Platform.Linux -> "linux"
         Platform.MacOs -> "darwin"
         Platform.Windows -> "windows"
-        Platform.Android -> "linux"
+        Platform.Android, Platform.Web -> "linux"
     }
     val arch = when (val raw = System.getProperty("os.arch").orEmpty().lowercase()) {
         "amd64", "x86_64" -> "amd64"

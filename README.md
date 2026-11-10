@@ -484,6 +484,42 @@ Nothing in husi checks the signature at runtime.
 * If you redistribute your build, say so. The published fingerprint above is how users tell an official release from a
   rebuild, and nothing in husi makes that distinction for them.
 
+#### 🌐 Web dashboard (Wasm)
+
+Build with Node.js 26+, `protoc` (the version in [version.sh](./buildScript/init/version.sh)) and the project's JDK:
+
+```shell
+make web
+make web_run
+make web_zip
+```
+
+No libcore binary, route assets or native plugin builds are needed. Output is under `composeApp/build/dist/wasmJs/productionExecutable/`; the ZIP is under `composeApp/build/distributions/`. Serve the files through HTTP(S), including all relative paths. Opening `index.html` through `file://` is not supported.
+
+Configure the [sing-box API service](https://sing-box.sagernet.org/configuration/service/api/) under the root `services` array (sing-box 1.14.0 or later). Add this entry to your existing configuration:
+
+```json
+{
+  "services": [
+    {
+      "type": "api",
+      "dashboard": {
+        "enabled": true,
+        "download_url": "https://github.com/xchacha20-poly1305/husi/archive/refs/heads/gh-pages.zip"
+      }
+    }
+  ]
+}
+```
+
+The dashboard stores its local database in OPFS (Origin Private File System), which requires a [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts). Serve the dashboard over HTTPS with a certificate trusted by your browser. Browsers also treat `http://localhost` and `http://127.0.0.1` as trustworthy, but ordinary HTTP LAN addresses do not qualify automatically.
+
+To use HTTP for your own LAN server in Chrome or Edge, explicitly trust its origin:
+
+1. Open `chrome://flags/#unsafely-treat-insecure-origin-as-secure` in Chrome, or `edge://flags/#unsafely-treat-insecure-origin-as-secure` in Edge.
+2. Add the dashboard's exact origin, for example `http://192.168.1.1:9090`, to **Insecure origins treated as secure** and set it to **Enabled**. Include the scheme and port, without path.
+3. Relaunch the browser using the button on that page, then reopen the dashboard.
+
 #### 🌈 Plugins
 
 ```shell
@@ -565,6 +601,8 @@ applicable MaxMind license terms.
 - [MetaCubeX/ClashMetaForAndroid](https://github.com/MetaCubeX/ClashMetaForAndroid)
 - [dyhkwong/Exclave](https://github.com/dyhkwong/Exclave)
 - [chen08209/FlClash](https://github.com/chen08209/FlClash)
+- [appshubcc/Bettbox](https://github.com/appshubcc/Bettbox)
+- [Zephyruso/zashboard](https://github.com/Zephyruso/zashboard)
 - [RikkaApps/RikkaX](https://github.com/RikkaApps/RikkaX)
 
 Developing

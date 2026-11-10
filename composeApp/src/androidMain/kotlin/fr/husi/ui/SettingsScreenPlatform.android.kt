@@ -30,6 +30,7 @@ import fr.husi.compose.TwoTargetSwitchPreference
 import fr.husi.compose.ValidatedTextField
 import fr.husi.compose.material3.Text
 import fr.husi.database.DataStore
+import fr.husi.database.preference.setBlocking
 import fr.husi.ktx.findActivity
 import fr.husi.ktx.getColour
 import fr.husi.resources.Res
@@ -140,10 +141,9 @@ internal actual fun PlatformGeneralOptions(needReload: () -> Unit) {
             Text(text)
         },
         valueToText = { it },
-    ) { value, onValueChange, onOk ->
+    ) { state, onOk ->
         ValidatedTextField(
-            value = value,
-            onValueChange = onValueChange,
+            state = state,
             onOk = onOk,
             validator = { text ->
                 if (text.lines().size > 1) {
@@ -294,8 +294,8 @@ internal actual fun PlatformAppendHttpProxyPreferences(needReload: () -> Unit) {
         },
         valueToText = { it },
         enabled = appendHttpProxyValue,
-    ) { value, onValueChange, onOk ->
-        HostTextField(value, onValueChange, onOk)
+    ) { state, onOk ->
+        HostTextField(state, onOk)
     }
 }
 

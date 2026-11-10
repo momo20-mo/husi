@@ -2,6 +2,7 @@ package fr.husi.ui.terminal
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -20,9 +21,12 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import fr.husi.compose.WideLayoutMinWidth
+import fr.husi.platform.Platform
 import fr.husi.platform.PlatformInfo
 import io.github.xchacha20_poly1305.libghostty.GhosttyTerminalSession
 import io.github.xchacha20_poly1305.libghostty.compose.GhosttyContentPaddingMode
@@ -45,28 +49,34 @@ fun TerminalPane(
     hazeState: HazeState,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    fontFamily: FontFamily = FontFamily.Monospace,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
-    val showExtraKeys = PlatformInfo.isAndroid
     var extraKeysHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val bottomInset = contentPadding.calculateBottomPadding()
-    val extraKeysClearance = if (showExtraKeys) {
-        with(density) { extraKeysHeightPx.toDp() } + ExtraKeysToolbarSpacing * 2
-    } else {
-        0.dp
-    }
-    val terminalPadding = PaddingValues(
-        start = contentPadding.calculateStartPadding(layoutDirection),
-        top = contentPadding.calculateTopPadding(),
-        end = contentPadding.calculateEndPadding(layoutDirection),
-        bottom = bottomInset + extraKeysClearance,
-    )
 
-    Box(modifier = modifier) {
+    BoxWithConstraints(modifier = modifier) {
+        val showExtraKeys = when (PlatformInfo.platform) {
+            Platform.Linux, Platform.MacOs, Platform.Windows -> maxWidth < WideLayoutMinWidth
+            Platform.Android, Platform.Web -> true
+        }
+        val extraKeysClearance = if (showExtraKeys) {
+            with(density) { extraKeysHeightPx.toDp() } + ExtraKeysToolbarSpacing * 2
+        } else {
+            0.dp
+        }
+        val terminalPadding = PaddingValues(
+            start = contentPadding.calculateStartPadding(layoutDirection),
+            top = contentPadding.calculateTopPadding(),
+            end = contentPadding.calculateEndPadding(layoutDirection),
+            bottom = bottomInset + extraKeysClearance,
+        )
+
         GhosttyTerminal(
             session = session,
+            fontFamily = fontFamily,
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(hazeState),

@@ -16,6 +16,7 @@ import fr.husi.bg.migrateCustomRouteAssets
 import fr.husi.compose.clearClipboardImageCache
 import fr.husi.database.DataStore
 import fr.husi.database.SagerDatabase
+import fr.husi.database.preference.getBlocking
 import fr.husi.di.initHusiKoin
 import fr.husi.ktx.Logs
 import fr.husi.ktx.invariantDirectoryPathString
@@ -84,8 +85,8 @@ class Application : Application(),
         }
 
         externalAssets.mkdirs()
-        val isExpert = DataStore.isExpert.getBlocking()
-        if (!isExpert) {
+        val isDebug = runBlocking { DataStore.advancedFeature(Key.ADVANCED_DEBUG) } != null
+        if (!isDebug) {
             Logs.openFile(externalAssets.resolve(LOG_FILE_NAME), DataStore.logLevel.getBlocking())
         }
         runBlocking {
@@ -97,7 +98,7 @@ class Application : Application(),
                 SagerDatabase.assetDao.getAll().first().map { it.name },
             )
         }
-        if (isBgProcess) initCore(isExpert)
+        if (isBgProcess) initCore(isDebug)
 
         if (isMainProcess) runOnDefaultDispatcher {
             runCatching {
@@ -120,7 +121,7 @@ class Application : Application(),
             repository.boxService?.start()
         }
 
-        if (isExpert) StrictMode.setVmPolicy(
+        if (isDebug) StrictMode.setVmPolicy(
             StrictMode.VmPolicy.Builder()
                 .detectLeakedSqlLiteObjects()
                 .detectLeakedClosableObjects()
@@ -130,7 +131,7 @@ class Application : Application(),
         )
     }
 
-    private fun initCore(isExpert: Boolean) {
+    private fun initCore(isDebug: Boolean) {
         Seq.setContext(this)
         Libcore.initCore(
             cacheDir.invariantDirectoryPathString(),
@@ -138,7 +139,7 @@ class Application : Application(),
             externalAssets.invariantDirectoryPathString(),
             DataStore.logMaxLine.getBlocking(),
             DataStore.logLevel.getBlocking(),
-            isExpert,
+            isDebug,
         )
         Logs.attachCore()
         loadCA(DataStore.certProvider.getBlocking())

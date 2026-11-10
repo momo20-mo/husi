@@ -1,9 +1,6 @@
-@file:OptIn(
-    ExperimentalMaterial3ExpressiveApi::class,
-    ExperimentalMaterial3Api::class,
-)
-
 package fr.husi.ui.dashboard
+
+import fr.husi.tailscale.TailscaleEndpointState
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,8 +19,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExpandedFullScreenSearchBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -44,11 +39,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.max
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import fr.husi.TrafficSortMode
+import fr.husi.compose.BackHandler
 import fr.husi.compose.CapsuleActionsScope
 import fr.husi.compose.CapsuleHeader
 import fr.husi.compose.CapsuleSearchInputField
@@ -59,13 +55,12 @@ import fr.husi.compose.SagerFabClearance
 import fr.husi.compose.SimpleIconButton
 import fr.husi.compose.TextButton
 import fr.husi.compose.material3.Checkbox
-import fr.husi.compose.material3.ScrollableDropdownMenuPopup
 import fr.husi.compose.material3.Icon
 import fr.husi.compose.material3.PrimaryTabRow
+import fr.husi.compose.material3.ScrollableDropdownMenuPopup
 import fr.husi.compose.material3.Tab
 import fr.husi.compose.material3.Text
 import fr.husi.compose.paddingHorizontal
-import fr.husi.core.remote.RemoteControlManager
 import fr.husi.resources.Res
 import fr.husi.resources.active
 import fr.husi.resources.ascending
@@ -102,6 +97,8 @@ import fr.husi.resources.pause
 import fr.husi.resources.play_arrow
 import fr.husi.resources.proxy_set
 import fr.husi.resources.public_icon
+import fr.husi.resources.replay
+import fr.husi.resources.reset
 import fr.husi.resources.reset_connections
 import fr.husi.resources.search
 import fr.husi.resources.search_outbounds
@@ -113,56 +110,52 @@ import fr.husi.resources.traffic_connections
 import fr.husi.resources.traffic_status
 import fr.husi.resources.warning_amber
 import fr.husi.ui.LocalSnackbarEmitter
-import fr.husi.ui.RouteSettingsUiState
 import fr.husi.ui.StringOrRes
-import fr.husi.ui.openconnect.OpenConnectAuthController
-import fr.husi.ui.openvpn.OpenVPNAuthController
-import fr.husi.ui.remote.RemoteSessionBanner
-import fr.husi.ui.remote.RemoteTargetMenuSection
+import fr.husi.ui.openconnect.OpenConnectAuthActions
+import fr.husi.ui.openvpn.OpenVPNAuthActions
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
-import org.koin.compose.koinInject
 
-private const val PAGE_STATUS = 0
-private const val PAGE_CONNECTIONS = 1
-private const val PAGE_PROXY_SET = 2
+internal enum class DashboardPage {
+    Stats,
+    Connections,
+    ProxySet,
+}
 
 @Composable
-fun DashboardScreen(
+internal fun DashboardContent(
     modifier: Modifier = Modifier,
-    openConnectController: OpenConnectAuthController,
-    openVPNController: OpenVPNAuthController,
-    openRouteSettings: (RouteSettingsUiState) -> Unit,
-    onOpenRemoteControl: () -> Unit,
+    dashboardViewModel: DashboardPresenter,
+    openConnectController: OpenConnectAuthActions,
+    openVPNController: OpenVPNAuthActions,
+    onCreateRoute: ((Set<ConnectionFields>, ConnectionDetailState) -> Unit)? = null,
+    targetMenu: @Composable (groupCount: Int, dismiss: () -> Unit) -> Unit,
     onOpenTailscaleEndpoint: (String) -> Unit,
+    tailscaleEndpoints: List<TailscaleEndpointState>,
+    targetConnected: Boolean,
+    remoteSessionKey: Long?,
+    remoteBanner: @Composable () -> Unit,
+    page: DashboardPage? = null,
 ) {
     val scope = rememberCoroutineScope()
     val snackbar = LocalSnackbarEmitter.current
-    val loadPlatformNetworkInfo = rememberLoadPlatformNetworkInfo()
 
     val pagerState = rememberPagerState(
-        initialPage = 0,
-        pageCount = { 3 },
+        pageCount = { DashboardPage.entries.size },
     )
 
-    val remoteControl = koinInject<RemoteControlManager>()
-    val dashboardViewModel: DashboardViewModel =
-        viewModel {
-            DashboardViewModel(
-                loadPlatformNetworkInfo = loadPlatformNetworkInfo,
-                remoteControl = remoteControl,
-            )
-        }
     val uiState by dashboardViewModel.uiState.collectAsStateWithLifecycle()
-    val remoteSession by remoteControl.session.collectAsStateWithLifecycle()
-    val targetConnected by remoteControl.targetConnected.collectAsStateWithLifecycle()
     var isOverflowMenuExpanded by remember { mutableStateOf(false) }
     var showResetAlert by remember { mutableStateOf(false) }
     var isEditingDashboard by remember { mutableStateOf(false) }
+    BackHandler(enabled = isEditingDashboard) {
+        isEditingDashboard = false
+    }
     val focusManager = LocalFocusManager.current
-    val isConnectionsPage = pagerState.currentPage == PAGE_CONNECTIONS
-    val isProxySetPage = pagerState.currentPage == PAGE_PROXY_SET
+    val currentPage = page ?: DashboardPage.entries[pagerState.currentPage]
+    val isConnectionsPage = currentPage == DashboardPage.Connections
+    val isProxySetPage = currentPage == DashboardPage.ProxySet
 
     val searchBarState = rememberSearchBarState()
     val proxySetSearchBarState = rememberSearchBarState()
@@ -238,9 +231,11 @@ fun DashboardScreen(
     }
     val windowInsets = WindowInsets.safeDrawing
 
-    LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage != PAGE_STATUS) isEditingDashboard = false
-        if (pagerState.currentPage != PAGE_PROXY_SET) {
+    LaunchedEffect(currentPage) {
+        if (currentPage != DashboardPage.Stats) {
+            isEditingDashboard = false
+        }
+        if (currentPage != DashboardPage.ProxySet) {
             dashboardViewModel.clearProxySetSearch()
             proxySetSearchBarState.animateToCollapsed()
         }
@@ -265,7 +260,12 @@ fun DashboardScreen(
         }
     }
 
-    LaunchedEffect(remoteSession?.server?.id, targetConnected) {
+    LifecycleResumeEffect(dashboardViewModel) {
+        dashboardViewModel.setDashboardActive(true)
+        onPauseOrDispose { dashboardViewModel.setDashboardActive(false) }
+    }
+
+    LaunchedEffect(remoteSessionKey, targetConnected) {
         dashboardViewModel.initialize(targetConnected)
     }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -323,12 +323,7 @@ fun DashboardScreen(
                                             expanded = isOverflowMenuExpanded,
                                             onDismissRequest = { isOverflowMenuExpanded = false },
                                         ) {
-                                            RemoteTargetMenuSection(
-                                                groupIndex = 0,
-                                                groupCount = 4,
-                                                onManage = onOpenRemoteControl,
-                                                onDismiss = { isOverflowMenuExpanded = false },
-                                            )
+                                            targetMenu(4) { isOverflowMenuExpanded = false }
                                             DropdownMenuGroup(
                                                 shapes = MenuDefaults.groupShape(1, 4),
                                             ) {
@@ -438,7 +433,7 @@ fun DashboardScreen(
                                 DashboardPageOverflowMenu(
                                     expanded = isOverflowMenuExpanded,
                                     onExpandedChange = { isOverflowMenuExpanded = it },
-                                    onOpenRemoteControl = onOpenRemoteControl,
+                                    targetMenu = targetMenu,
                                 ) { dismiss ->
                                     ProxySetOrderMenuItems(
                                         proxySetOrder = uiState.proxySetOrder,
@@ -456,12 +451,31 @@ fun DashboardScreen(
                         CapsuleTopBar(
                             hazeState = hazeState,
                             navigationIcon = null,
-                            title = { Text(stringResource(Res.string.menu_dashboard)) },
+                            title = {
+                                Text(
+                                    stringResource(
+                                        if (page == null) {
+                                            Res.string.menu_dashboard
+                                        } else {
+                                            Res.string.traffic_status
+                                        },
+                                    ),
+                                )
+                            },
                             actions = {
+                                if (isEditingDashboard) {
+                                    CapsuleActionButton {
+                                        SimpleIconButton(
+                                            imageVector = vectorResource(Res.drawable.replay),
+                                            contentDescription = stringResource(Res.string.reset),
+                                            onClick = { dashboardViewModel.resetDashboardWidgets() },
+                                        )
+                                    }
+                                }
                                 DashboardPageOverflowMenu(
                                     expanded = isOverflowMenuExpanded,
                                     onExpandedChange = { isOverflowMenuExpanded = it },
-                                    onOpenRemoteControl = onOpenRemoteControl,
+                                    targetMenu = targetMenu,
                                 ) { dismiss ->
                                     EditWidgetsMenuItem(
                                         isEditingDashboard = isEditingDashboard,
@@ -476,42 +490,33 @@ fun DashboardScreen(
                             scrollBehavior = scrollBehavior,
                         )
                     }
-                    RemoteSessionBanner(
-                        windowInsets = windowInsets.only(WindowInsetsSides.Horizontal),
-                        remoteControl = remoteControl,
-                    )
+                    remoteBanner()
 
-                    PrimaryTabRow(
-                        selectedTabIndex = pagerState.currentPage,
-                        containerColor = Color.Transparent,
-                    ) {
-                        Tab(
-                            text = { Text(stringResource(Res.string.traffic_status)) },
-                            selected = pagerState.currentPage == PAGE_STATUS,
-                            onClick = {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(PAGE_STATUS)
-                                }
-                            },
-                        )
-                        Tab(
-                            text = { Text(stringResource(Res.string.traffic_connections)) },
-                            selected = pagerState.currentPage == PAGE_CONNECTIONS,
-                            onClick = {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(PAGE_CONNECTIONS)
-                                }
-                            },
-                        )
-                        Tab(
-                            text = { Text(stringResource(Res.string.proxy_set)) },
-                            selected = pagerState.currentPage == PAGE_PROXY_SET,
-                            onClick = {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(PAGE_PROXY_SET)
-                                }
-                            },
-                        )
+                    if (page == null) {
+                        PrimaryTabRow(
+                            selectedTabIndex = pagerState.currentPage,
+                            containerColor = Color.Transparent,
+                        ) {
+                            for ((index, tab) in DashboardPage.entries.withIndex()) {
+                                Tab(
+                                    text = {
+                                        Text(
+                                            stringResource(
+                                                when (tab) {
+                                                    DashboardPage.Stats -> Res.string.traffic_status
+                                                    DashboardPage.Connections -> Res.string.traffic_connections
+                                                    DashboardPage.ProxySet -> Res.string.proxy_set
+                                                },
+                                            ),
+                                        )
+                                    },
+                                    selected = currentPage == tab,
+                                    onClick = {
+                                        scope.launch { pagerState.animateScrollToPage(index) }
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -527,16 +532,15 @@ fun DashboardScreen(
                 .paddingHorizontal(innerPadding)
                 .hazeSource(hazeState),
         ) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-            ) { page ->
-                when (page) {
-                    PAGE_STATUS -> DashboardStatusScreen(
+            val pageContent: @Composable (DashboardPage) -> Unit = { dashboardPage ->
+                when (dashboardPage) {
+                    DashboardPage.Stats -> DashboardStatusScreen(
+                        tailscaleEndpoints = tailscaleEndpoints,
                         uiState = uiState,
                         openConnectController = openConnectController,
                         openVPNController = openVPNController,
                         contentPadding = pageContentPadding,
+                        detectIP = dashboardViewModel::detectIP,
                         selectClashMode = { dashboardViewModel.setClashMode(it) },
                         setSystemProxyEnabled = { dashboardViewModel.setSystemProxyEnabled(it) },
                         showError = { message ->
@@ -550,7 +554,7 @@ fun DashboardScreen(
                         onOpenTailscaleEndpoint = onOpenTailscaleEndpoint,
                     )
 
-                    PAGE_CONNECTIONS -> DashboardConnectionsScreen(
+                    DashboardPage.Connections -> DashboardConnectionsScreen(
                         uiState = uiState,
                         contentPadding = pageContentPadding,
                         resolveProcessInfo = dashboardViewModel::resolveProcessInfo,
@@ -560,7 +564,7 @@ fun DashboardScreen(
                         onConnectionClick = dashboardViewModel::selectConnection,
                     )
 
-                    PAGE_PROXY_SET -> DashboardProxySetScreen(
+                    DashboardPage.ProxySet -> DashboardProxySetScreen(
                         uiState = uiState,
                         contentPadding = pageContentPadding,
                         selectProxy = { group, proxy ->
@@ -572,8 +576,16 @@ fun DashboardScreen(
                         openGroupSearch = dashboardViewModel::openProxyGroupSearch,
                         closeGroupSearch = dashboardViewModel::closeProxyGroupSearch,
                     )
-
-                    else -> error("impossible")
+                }
+            }
+            if (page != null) {
+                pageContent(page)
+            } else {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { index ->
+                    pageContent(DashboardPage.entries[index])
                 }
             }
         }
@@ -607,9 +619,11 @@ fun DashboardScreen(
                 resolveProcessInfo = dashboardViewModel::resolveProcessInfo,
                 closeConnection = dashboardViewModel::closeConnection,
                 onDismiss = { dashboardViewModel.selectConnection(null) },
-                openRouteSettings = { draft ->
-                    dashboardViewModel.selectConnection(null)
-                    openRouteSettings(draft)
+                openRouteSettings = onCreateRoute?.let { create ->
+                    { fields, selectedConnection ->
+                        dashboardViewModel.selectConnection(null)
+                        create(fields, selectedConnection)
+                    }
                 },
             )
         }
@@ -642,7 +656,7 @@ fun DashboardScreen(
 private fun CapsuleActionsScope.DashboardPageOverflowMenu(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    onOpenRemoteControl: () -> Unit,
+    targetMenu: @Composable (groupCount: Int, dismiss: () -> Unit) -> Unit,
     pageMenuGroup: @Composable (dismiss: () -> Unit) -> Unit,
 ) {
     val dismiss = { onExpandedChange(false) }
@@ -657,12 +671,7 @@ private fun CapsuleActionsScope.DashboardPageOverflowMenu(
                 expanded = expanded,
                 onDismissRequest = dismiss,
             ) {
-                RemoteTargetMenuSection(
-                    groupIndex = 0,
-                    groupCount = 2,
-                    onManage = onOpenRemoteControl,
-                    onDismiss = dismiss,
-                )
+                targetMenu(2, dismiss)
                 Spacer(modifier = Modifier.height(MenuDefaults.GroupSpacing))
                 DropdownMenuGroup(
                     shapes = MenuDefaults.groupShape(1, 2),

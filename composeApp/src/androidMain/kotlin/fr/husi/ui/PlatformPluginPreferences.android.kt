@@ -9,6 +9,7 @@ import fr.husi.compose.TextFieldPreference
 import fr.husi.compose.preferenceGroup
 import fr.husi.compose.material3.Text
 import fr.husi.database.DataStore
+import fr.husi.database.preference.setBlocking
 import fr.husi.resources.Res
 import fr.husi.resources.copyright
 import fr.husi.resources.custom_plugin_prefix
@@ -16,10 +17,10 @@ import fr.husi.resources.custom_plugin_prefix_summary
 import org.jetbrains.compose.resources.stringResource
 
 internal actual fun LazyListScope.platformPluginPreferences(
-    isExpert: Boolean,
+    isCustomPluginPrefixEnabled: Boolean,
     needRestart: () -> Unit,
 ) {
-    if (!isExpert) return
+    if (!isCustomPluginPrefixEnabled) return
     preferenceGroup {
         val value by DataStore.customPluginPrefix.collectAsStateWithLifecycle()
         TextFieldPreference(

@@ -8,8 +8,10 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/daemon"
 	E "github.com/sagernet/sing/common/exceptions"
+	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
 
+	"github.com/xchacha20-poly1305/husi/libcore/v2/ipprobe"
 	"github.com/xchacha20-poly1305/husi/libcore/v2/pb/husi/v1"
 	"github.com/xchacha20-poly1305/husi/libcore/v2/urltest"
 	"google.golang.org/grpc/codes"
@@ -90,4 +92,30 @@ func defaultURLTest(host *Host, tag, link string, timeoutMs int32, options urlte
 		timeoutMs,
 		options,
 	)
+}
+
+func (s *coreService) DetectIP(ctx context.Context, req *husiv1.DetectIPRequest) (*husiv1.DetectIPResponse, error) {
+	instanceCtx := s.host.liveInstanceContext()
+	var dialer N.Dialer = N.SystemDialer
+	var resolver ipprobe.Resolver
+	if instanceCtx == nil {
+		instanceCtx = s.host.ctx
+		resolver = service.FromContext[ipprobe.Resolver](s.host.ctx)
+	} else {
+		manager := service.FromContext[adapter.OutboundManager](instanceCtx)
+		if manager == nil || manager.Default() == nil {
+			return nil, status.Error(codes.FailedPrecondition, "default outbound unavailable")
+		}
+		dialer = manager.Default()
+		resolver = service.FromContext[adapter.DNSRouter](instanceCtx)
+	}
+	probeCtx, cancel := context.WithCancel(instanceCtx)
+	defer cancel()
+	stop := context.AfterFunc(ctx, cancel)
+	defer stop()
+	address, err := ipprobe.Probe(probeCtx, dialer, resolver, req.GetServer())
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, err.Error())
+	}
+	return &husiv1.DetectIPResponse{Ip: address.String()}, nil
 }
