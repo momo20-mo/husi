@@ -6,10 +6,6 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing release tag
-        required: true
-        type: string
       no-publish:
         description: Build artifacts without publishing a GitHub Release
         required: false
@@ -22,12 +18,29 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
+    outputs:
+      release-tag: ${{ steps.version.outputs.release-tag }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: recursive
+      - name: Read release version
+        id: version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^VERSION_NAME=//p' husi.properties | head -n 1)"
+          if [ -z "$version" ]; then
+            echo "VERSION_NAME is missing from husi.properties" >&2
+            exit 1
+          fi
+          tag="v$version"
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" != "$tag" ]]; then
+            echo "Pushed tag '$GITHUB_REF_NAME' does not match husi.properties version '$tag'" >&2
+            exit 1
+          fi
+          echo "release-tag=$tag" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/load-build-versions
       - uses: ./.github/actions/setup-ndk
       - uses: ./.github/actions/setup-jbr
@@ -86,7 +99,7 @@ jobs:
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ needs.android.outputs.release-tag }}
         run: |
           mapfile -d '' files < <(find release-artifacts -type f -print0)
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
