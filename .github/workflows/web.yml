@@ -2,7 +2,7 @@ name: Web dashboard
 
 on:
   push:
-    branches: [dev]
+    branches: [-dev]
   pull_request:
     paths:
       - composeApp/**
