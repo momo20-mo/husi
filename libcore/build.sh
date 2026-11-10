@@ -315,6 +315,10 @@ if [ -n "$DESKTOP_TARGETS" ] && [ "$BUILD_DESKTOP" != "1" ] && [ "$BUILD_ANDROID
     BUILD_DESKTOP=1
 fi
 
+
+# Resolve the upstream branch on every core build; go get records the selected commit.
+go get github.com/sagernet/sing-box@testing
+
 if [ "$BUILD_ANDROID" == "1" ]; then
     # gomobile runs the gobind on PATH: install both at the versions go.mod pins.
     go install tool
