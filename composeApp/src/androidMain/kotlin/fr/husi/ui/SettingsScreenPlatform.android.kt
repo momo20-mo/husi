@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.os.LocaleListCompat
 import fr.husi.LauncherIcon
+import fr.husi.bg.VpnConstants
 import fr.husi.compose.HostTextField
 import fr.husi.compose.collectAsStateWithLifecycle
 import fr.husi.compose.IconMaskColors
@@ -33,6 +34,7 @@ import fr.husi.database.DataStore
 import fr.husi.database.preference.setBlocking
 import fr.husi.ktx.findActivity
 import fr.husi.ktx.getColour
+import fr.husi.ktx.isIPv4
 import fr.husi.resources.Res
 import fr.husi.resources.acquire_wake_lock
 import fr.husi.resources.acquire_wake_lock_summary
@@ -71,6 +73,8 @@ import fr.husi.resources.route_opt_bypass_lan
 import fr.husi.resources.show_group_in_notification
 import fr.husi.resources.update_proxy_apps_when_install
 import fr.husi.resources.visibility_off
+import fr.husi.resources.vpn_interface_ipv4
+import fr.husi.resources.vpn_interface_ipv4_summary
 import fr.husi.resources.vpn_session_name
 import fr.husi.resources.vpn_session_name_summary
 import fr.husi.tasker.TaskerActivity
@@ -124,6 +128,40 @@ internal actual fun rememberApplyNightMode(): (Int) -> Unit {
 
 @Composable
 internal actual fun PlatformGeneralOptions(needReload: () -> Unit) {
+    val interfaceIpv4 by DataStore.vpnInterfaceIpv4.collectAsStateWithLifecycle()
+    TextFieldPreference(
+        value = interfaceIpv4,
+        onValueChange = {
+            DataStore.vpnInterfaceIpv4.setBlocking(it.trim())
+            needReload()
+        },
+        title = { Text(stringResource(Res.string.vpn_interface_ipv4)) },
+        textToValue = { text ->
+            text.trim().takeIf { it.isEmpty() || (it.isIPv4() && VpnConstants.isValidPrivateVlan4Client(it)) }
+        },
+        icon = {
+            MaskedIcon(Res.drawable.label, color = IconMaskColors.IconLightBlue)
+        },
+        summary = {
+            Text(interfaceIpv4.ifBlank { stringResource(Res.string.vpn_interface_ipv4_summary) })
+        },
+        valueToText = { it },
+    ) { state, onOk ->
+        ValidatedTextField(
+            state = state,
+            onOk = onOk,
+            validator = { text ->
+                val address = text.trim()
+                when {
+                    address.isBlank() -> null
+                    !address.isIPv4() -> "Invalid IPv4 address"
+                    !VpnConstants.isValidPrivateVlan4Client(address) -> "IPv4 address must have a following DNS address"
+                    else -> null
+                }
+            },
+        )
+    }
+
     val value by DataStore.vpnSessionName.collectAsStateWithLifecycle()
     TextFieldPreference(
         value = value,

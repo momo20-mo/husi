@@ -172,6 +172,7 @@ object DataStore : ApplicationPreferences(
     val tcpKeepAliveInterval = configurationStore.string(Key.TCP_KEEP_ALIVE_INTERVAL_0) { "75s" }
     val mtu = configurationStore.int(Key.MTU) { 9000 }
     val vpnSessionName = configurationStore.string(Key.VPN_SESSION_NAME) { "" }
+    val vpnInterfaceIpv4 = configurationStore.string(Key.VPN_INTERFACE_IPV4) { "" }
     val tunInterfaceName = configurationStore.string(Key.TUN_INTERFACE_NAME) { "" }
     val tunStrictRoute = configurationStore.boolean(Key.TUN_STRICT_ROUTE) { true }
     val tunAutoRedirect = configurationStore.boolean(Key.TUN_AUTO_REDIRECT) { true }

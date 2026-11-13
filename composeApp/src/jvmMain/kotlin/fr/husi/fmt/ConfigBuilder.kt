@@ -716,9 +716,14 @@ suspend fun buildConfig(
                     // Fixed upstream: SagerNet/sing-box@339b1934 (codeberg husi#87)
                     dns_mode = SingBoxOptions.TUN_DNS_MODE_HIJACK
                     applyPlatformConfig()
+                    val ipv4Address = if (PlatformInfo.isAndroid) {
+                        DataStore.vpnInterfaceIpv4.get().trim().ifBlank { VpnConstants.PRIVATE_VLAN4_CLIENT }
+                    } else {
+                        VpnConstants.PRIVATE_VLAN4_CLIENT
+                    }
                     when (networkStrategy) {
                         SingBoxOptions.STRATEGY_IPV4_ONLY -> {
-                            address = mutableListOf(VpnConstants.PRIVATE_VLAN4_CLIENT + "/28")
+                            address = mutableListOf("$ipv4Address/28")
                         }
 
                         SingBoxOptions.STRATEGY_IPV6_ONLY -> {
@@ -727,7 +732,7 @@ suspend fun buildConfig(
 
                         else -> {
                             address = mutableListOf(
-                                VpnConstants.PRIVATE_VLAN4_CLIENT + "/28",
+                                "$ipv4Address/28",
                                 VpnConstants.PRIVATE_VLAN6_CLIENT + "/126",
                             )
                         }

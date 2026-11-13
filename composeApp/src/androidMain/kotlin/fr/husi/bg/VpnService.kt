@@ -38,7 +38,6 @@ class VpnService : BaseVpnService(),
     companion object {
 
         const val PRIVATE_VLAN4_CLIENT = VpnConstants.PRIVATE_VLAN4_CLIENT
-        const val PRIVATE_VLAN4_ROUTER = VpnConstants.PRIVATE_VLAN4_ROUTER
         const val PRIVATE_VLAN6_CLIENT = VpnConstants.PRIVATE_VLAN6_CLIENT
         const val PRIVATE_VLAN6_ROUTER = VpnConstants.PRIVATE_VLAN6_ROUTER
 
@@ -120,11 +119,14 @@ class VpnService : BaseVpnService(),
             .setSession(sessionName)
             .setMtu(DataStore.mtu.getBlocking())
         val networkStrategy = DataStore.networkStrategy.getBlocking()
+        val privateVlan4Client = DataStore.vpnInterfaceIpv4.getBlocking().trim()
+            .ifBlank { PRIVATE_VLAN4_CLIENT }
+        val privateVlan4Router by lazy { VpnConstants.privateVlan4Router(privateVlan4Client) }
 
         when (networkStrategy) {
             SingBoxOptions.STRATEGY_IPV4_ONLY -> {
-                builder.addAddress(PRIVATE_VLAN4_CLIENT, 30)
-                builder.addDnsServer(PRIVATE_VLAN4_ROUTER)
+                builder.addAddress(privateVlan4Client, 30)
+                builder.addDnsServer(privateVlan4Router)
             }
 
             SingBoxOptions.STRATEGY_IPV6_ONLY -> {
@@ -133,10 +135,10 @@ class VpnService : BaseVpnService(),
             }
 
             else -> {
-                builder.addAddress(PRIVATE_VLAN4_CLIENT, 30)
+                builder.addAddress(privateVlan4Client, 30)
                 builder.addAddress(PRIVATE_VLAN6_CLIENT, 126)
 
-                builder.addDnsServer(PRIVATE_VLAN4_ROUTER)
+                builder.addDnsServer(privateVlan4Router)
                 builder.addDnsServer(PRIVATE_VLAN6_ROUTER)
             }
         }
@@ -160,7 +162,7 @@ class VpnService : BaseVpnService(),
             }
             when (networkStrategy) {
                 SingBoxOptions.STRATEGY_IPV4_ONLY -> {
-                    builder.addRoute(PRIVATE_VLAN4_ROUTER, 32)
+                    builder.addRoute(privateVlan4Router, 32)
                     fakeDNSRange4?.let {
                         builder.addRoute(it.address.hostAddress!!, it.prefixSize)
                     }
@@ -177,7 +179,7 @@ class VpnService : BaseVpnService(),
                 }
 
                 else -> {
-                    builder.addRoute(PRIVATE_VLAN4_ROUTER, 32)
+                    builder.addRoute(privateVlan4Router, 32)
                     fakeDNSRange4?.let {
                         builder.addRoute(it.address.hostAddress!!, it.prefixSize)
                     }

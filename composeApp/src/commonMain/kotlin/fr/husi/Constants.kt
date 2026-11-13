@@ -121,6 +121,7 @@ object Key {
     const val LOG_TERMINAL_MODE = "logTerminalMode"
     const val MTU = "mtu"
     const val VPN_SESSION_NAME = "vpnSessionName"
+    const val VPN_INTERFACE_IPV4 = "vpnInterfaceIpv4"
     const val TUN_INTERFACE_NAME = "tunInterfaceName"
     const val TUN_STRICT_ROUTE = "tunStrictRoute"
     const val TUN_AUTO_REDIRECT = "tunAutoRedirect"
